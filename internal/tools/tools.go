@@ -33,6 +33,8 @@ func Register(s *mcpserver.MCPServer, client *webex.Client, buf *buffer.RingBuff
 	// v0.3 — intelligence.
 	registerListMeetings(s, client)
 	registerGetMeetingTranscript(s, client)
+	registerListRecordings(s, client)
+	registerGetRecordingTranscript(s, client)
 	registerGetDigest(s, client)
 	registerGetCrossSpaceContext(s, client)
 }

@@ -96,8 +96,14 @@ func (c *Client) GetMessages(roomID string, max int) ([]Message, error) {
 }
 
 // SendMessage sends a message to a space, person, or thread.
-func (c *Client) SendMessage(roomID, toPersonID, toPersonEmail, parentID, text string) (*Message, error) {
-	body := map[string]string{"text": text}
+func (c *Client) SendMessage(roomID, toPersonID, toPersonEmail, parentID, text, markdown string) (*Message, error) {
+	body := map[string]string{}
+	if markdown != "" {
+		body["markdown"] = markdown
+	}
+	if text != "" {
+		body["text"] = text
+	}
 	if roomID != "" {
 		body["roomId"] = roomID
 	}
@@ -327,6 +333,98 @@ func (c *Client) GetSpaceAnalytics(roomID string, daysBack int) (*SpaceAnalytics
 	}, nil
 }
 
+// Recording represents a Webex recording.
+type Recording struct {
+	ID                 string `json:"id"`
+	MeetingID          string `json:"meetingId"`
+	ScheduledMeetingID string `json:"scheduledMeetingId"`
+	MeetingSeriesID    string `json:"meetingSeriesId"`
+	Topic              string `json:"topic"`
+	CreateTime         string `json:"createTime"`
+	TimeRecorded       string `json:"timeRecorded"`
+	HostEmail          string `json:"hostEmail"`
+	SiteURL            string `json:"siteUrl"`
+	DownloadURL        string `json:"downloadUrl"`
+	PlaybackURL        string `json:"playbackUrl"`
+	Password           string `json:"password"`
+	Format             string `json:"format"`
+	DurationSeconds    int    `json:"durationSeconds"`
+	SizeBytes          int64  `json:"sizeBytes"`
+	ShareToMe          bool   `json:"shareToMe"`
+	ServiceType        string `json:"serviceType"`
+	Status             string `json:"status"`
+}
+
+// RecordingDetails extends Recording with temporary download links.
+type RecordingDetails struct {
+	Recording
+	TemporaryDirectDownloadLinks *DownloadLinks `json:"temporaryDirectDownloadLinks,omitempty"`
+}
+
+// DownloadLinks contains temporary direct download URLs (3-hour expiry).
+type DownloadLinks struct {
+	RecordingDownloadLink  string `json:"recordingDownloadLink"`
+	AudioDownloadLink      string `json:"audioDownloadLink"`
+	TranscriptDownloadLink string `json:"transcriptDownloadLink"`
+	Expiration             string `json:"expiration"`
+}
+
+// ListRecordings returns recordings in a time range (includes shared recordings).
+func (c *Client) ListRecordings(from, to string, max int) ([]Recording, error) {
+	params := url.Values{}
+	if from != "" {
+		params.Set("from", from)
+	}
+	if to != "" {
+		params.Set("to", to)
+	}
+	if max > 0 {
+		params.Set("max", fmt.Sprintf("%d", max))
+	}
+
+	var result struct {
+		Items []Recording `json:"items"`
+	}
+	if err := c.get("/recordings", params, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// GetRecordingDetails returns recording details including temporary download links.
+func (c *Client) GetRecordingDetails(recordingID string) (*RecordingDetails, error) {
+	var details RecordingDetails
+	if err := c.get("/recordings/"+recordingID, nil, &details); err != nil {
+		return nil, err
+	}
+	return &details, nil
+}
+
+// DownloadRecordingTranscript downloads the transcript from a recording's temporary link.
+func (c *Client) DownloadRecordingTranscript(downloadURL string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("download error %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading transcript body: %w", err)
+	}
+	return string(body), nil
+}
+
 // Meeting represents a Webex meeting.
 type Meeting struct {
 	ID              string `json:"id"`
@@ -355,13 +453,16 @@ type Transcript struct {
 }
 
 // ListMeetings returns meetings in a time range.
-func (c *Client) ListMeetings(from, to string, max int) ([]Meeting, error) {
+func (c *Client) ListMeetings(from, to, meetingType string, max int) ([]Meeting, error) {
 	params := url.Values{}
 	if from != "" {
 		params.Set("from", from)
 	}
 	if to != "" {
 		params.Set("to", to)
+	}
+	if meetingType != "" {
+		params.Set("meetingType", meetingType)
 	}
 	if max > 0 {
 		params.Set("max", fmt.Sprintf("%d", max))
