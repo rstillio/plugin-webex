@@ -23,15 +23,19 @@ func registerSendMessage(s *mcpserver.MCPServer, client *webex.Client) {
 			mcp.Description("The email of the person to send a direct message to."),
 		),
 		mcp.WithString("text",
-			mcp.Required(),
-			mcp.Description("The message text to send."),
+			mcp.Description("Plain text message. Used as fallback when markdown is provided. At least one of text or markdown is required."),
+		),
+		mcp.WithString("markdown",
+			mcp.Description("Markdown-formatted message. Webex supports bold, italic, lists, links, code blocks, and more. When provided, text is used as the plain-text fallback."),
 		),
 	)
 
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		text, err := req.RequireString("text")
-		if err != nil {
-			return mcp.NewToolResultError("text is required"), nil
+		text := req.GetString("text", "")
+		markdown := req.GetString("markdown", "")
+
+		if text == "" && markdown == "" {
+			return mcp.NewToolResultError("at least one of text or markdown is required"), nil
 		}
 
 		roomID := req.GetString("room_id", "")
@@ -42,7 +46,7 @@ func registerSendMessage(s *mcpserver.MCPServer, client *webex.Client) {
 			return mcp.NewToolResultError("one of room_id, to_person_id, or to_person_email is required"), nil
 		}
 
-		msg, err := client.SendMessage(roomID, toPersonID, toPersonEmail, "", text)
+		msg, err := client.SendMessage(roomID, toPersonID, toPersonEmail, "", text, markdown)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to send message: %v", err)), nil
 		}
@@ -82,7 +86,7 @@ func registerReplyToThread(s *mcpserver.MCPServer, client *webex.Client) {
 			return mcp.NewToolResultError("text is required"), nil
 		}
 
-		msg, err := client.SendMessage(roomID, "", "", parentID, text)
+		msg, err := client.SendMessage(roomID, "", "", parentID, text, "")
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to reply: %v", err)), nil
 		}
