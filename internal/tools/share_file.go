@@ -12,7 +12,7 @@ import (
 
 func registerShareFile(s *mcpserver.MCPServer, client *webex.Client) {
 	tool := mcp.NewTool("share_file",
-		mcp.WithDescription("Upload and share a file to a Webex space. (Not yet implemented — multipart upload deferred to a future version.)"),
+		mcp.WithDescription("Upload and share a local file as an attachment in a Webex space."),
 		mcp.WithString("room_id",
 			mcp.Required(),
 			mcp.Description("The ID of the space to share the file in."),
@@ -20,6 +20,9 @@ func registerShareFile(s *mcpserver.MCPServer, client *webex.Client) {
 		mcp.WithString("file_path",
 			mcp.Required(),
 			mcp.Description("The local file path to upload."),
+		),
+		mcp.WithString("message",
+			mcp.Description("Optional text or markdown message to include with the file."),
 		),
 	)
 
@@ -33,10 +36,13 @@ func registerShareFile(s *mcpserver.MCPServer, client *webex.Client) {
 			return mcp.NewToolResultError("file_path is required"), nil
 		}
 
-		if err := client.ShareFile(roomID, filePath); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("%v", err)), nil
+		message := req.GetString("message", "")
+
+		msg, err := client.ShareFile(roomID, filePath, message)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to share file: %v", err)), nil
 		}
 
-		return mcp.NewToolResultText("File shared."), nil
+		return mcp.NewToolResultText(fmt.Sprintf("File shared successfully (message ID: %s).", msg.ID)), nil
 	})
 }

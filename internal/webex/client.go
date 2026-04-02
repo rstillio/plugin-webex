@@ -1,9 +1,11 @@
 package webex
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -311,9 +313,15 @@ func (c *Client) DownloadAttachment(fileURL, destDir string) (string, string, er
 	return destPath, contentType, nil
 }
 
-// ShareFile is a placeholder for file upload/share (multipart upload deferred).
-func (c *Client) ShareFile(roomID, filePath string) error {
-	return fmt.Errorf("share_file is not yet implemented (multipart upload deferred to a future version)")
+// ShareFile uploads a local file to a Webex space as a message attachment.
+func (c *Client) ShareFile(roomID, filePath, message string) (*Message, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("opening file: %w", err)
+	}
+	defer file.Close()
+
+	return c.postMultipart("/messages", roomID, message, filepath.Base(filePath), file)
 }
 
 // GetSpaceAnalytics computes client-side analytics for a space over a time window.
@@ -631,3 +639,54 @@ func (c *Client) post(path string, body interface{}, out interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+// postMultipart performs an authenticated multipart/form-data POST for file uploads.
+func (c *Client) postMultipart(path, roomID, message, filename string, file io.Reader) (*Message, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	if err := writer.WriteField("roomId", roomID); err != nil {
+		return nil, fmt.Errorf("writing roomId field: %w", err)
+	}
+
+	if message != "" {
+		if err := writer.WriteField("markdown", message); err != nil {
+			return nil, fmt.Errorf("writing markdown field: %w", err)
+		}
+	}
+
+	part, err := writer.CreateFormFile("files", filename)
+	if err != nil {
+		return nil, fmt.Errorf("creating form file: %w", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, fmt.Errorf("copying file content: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("closing multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, baseURL+path, &buf)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("webex API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var msg Message
+	if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+	return &msg, nil
+}
