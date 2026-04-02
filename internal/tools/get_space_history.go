@@ -41,7 +41,14 @@ func registerGetSpaceHistory(s *mcpserver.MCPServer, client *webex.Client) {
 			if msg.ParentID != "" {
 				thread = fmt.Sprintf(" [thread: %s]", msg.ParentID)
 			}
-			text += fmt.Sprintf("- **%s** (%s) [id: %s]%s: %s\n", msg.PersonEmail, msg.Created, msg.ID, thread, msg.Text)
+			files := ""
+			if len(msg.Files) > 0 {
+				files = fmt.Sprintf(" [%d attachment(s)]", len(msg.Files))
+			}
+			text += fmt.Sprintf("- **%s** (%s) [id: %s]%s%s: %s\n", msg.PersonEmail, msg.Created, msg.ID, thread, files, msg.Text)
+			for i, f := range msg.Files {
+				text += fmt.Sprintf("  - attachment %d: %s\n", i+1, f)
+			}
 		}
 		if text == "" {
 			text = "No messages found in this space."

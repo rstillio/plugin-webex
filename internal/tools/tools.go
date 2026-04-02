@@ -26,6 +26,7 @@ func Register(s *mcpserver.MCPServer, client *webex.Client, buf *buffer.RingBuff
 	registerGetMentions(s, buf)
 	registerSendAdaptiveCard(s, client)
 	registerShareFile(s, client)
+	registerDownloadAttachment(s, client)
 	registerGetSpaceAnalytics(s, client)
 	registerListenerControl(s, lst)
 	registerGetNotificationRoutes(s, rtr)

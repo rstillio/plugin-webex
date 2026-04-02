@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -242,6 +244,71 @@ func (c *Client) SendAdaptiveCard(roomID, toPersonEmail string, card interface{}
 		return nil, err
 	}
 	return &msg, nil
+}
+
+// DownloadAttachment downloads a file attachment from a Webex file URL.
+// Webex file URLs require Bearer token authentication. The file is saved to
+// the specified directory and the full path is returned.
+func (c *Client) DownloadAttachment(fileURL, destDir string) (string, string, error) {
+	req, err := http.NewRequest(http.MethodGet, fileURL, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("webex API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+
+	// Extract filename from Content-Disposition header if available.
+	filename := ""
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		for _, part := range strings.Split(cd, ";") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "filename=") {
+				filename = strings.Trim(strings.TrimPrefix(part, "filename="), "\"")
+				break
+			}
+		}
+	}
+
+	// Fall back to deriving a filename from the URL path.
+	if filename == "" {
+		urlPath := strings.Split(fileURL, "?")[0]
+		parts := strings.Split(urlPath, "/")
+		if len(parts) > 0 {
+			filename = parts[len(parts)-1]
+		}
+	}
+	if filename == "" {
+		filename = "attachment"
+	}
+
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("creating download directory: %w", err)
+	}
+
+	destPath := filepath.Join(destDir, filename)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("reading response body: %w", err)
+	}
+
+	if err := os.WriteFile(destPath, body, 0o644); err != nil {
+		return "", "", fmt.Errorf("writing file: %w", err)
+	}
+
+	return destPath, contentType, nil
 }
 
 // ShareFile is a placeholder for file upload/share (multipart upload deferred).
@@ -563,3 +630,4 @@ func (c *Client) post(path string, body interface{}, out interface{}) error {
 
 	return json.NewDecoder(resp.Body).Decode(out)
 }
+

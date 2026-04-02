@@ -87,7 +87,15 @@ func searchSpace(client *webex.Client, roomID, queryLower string, maxMessages in
 	var matches []string
 	for _, msg := range messages {
 		if strings.Contains(strings.ToLower(msg.Text), queryLower) {
-			matches = append(matches, fmt.Sprintf("**%s** (%s) [id: %s]: %s", msg.PersonEmail, msg.Created, msg.ID, msg.Text))
+			files := ""
+			if len(msg.Files) > 0 {
+				files = fmt.Sprintf(" [%d attachment(s)]", len(msg.Files))
+			}
+			line := fmt.Sprintf("**%s** (%s) [id: %s]%s: %s", msg.PersonEmail, msg.Created, msg.ID, files, msg.Text)
+			for i, f := range msg.Files {
+				line += fmt.Sprintf("\n  - attachment %d: %s", i+1, f)
+			}
+			matches = append(matches, line)
 		}
 	}
 	return matches, nil
