@@ -183,3 +183,28 @@ Targets the official Claude Code plugin marketplace. Requirements:
 - Secure credential handling (WEBEX_TOKEN never logged or exposed)
 - Plugin manifest in `.claude-plugin/plugin.json`
 - Single binary distribution (no runtime dependencies)
+
+## Dependency Independence
+
+This project is a standalone creation. It does not depend on CM (context management)
+or ODZ infrastructure to build, test, or run.
+
+**Independence tests (ADR-003):**
+- **Colleague test:** A colleague can clone this repo and run it with only the
+  dependencies declared in `go.mod`. No CM tools, context repos, or personal
+  infrastructure required.
+- **Stacy test:** This project functions on a machine with no `~/.claude/` config,
+  no context repos, no CM skills or scripts.
+
+**CM tools used during development (not runtime dependencies):**
+- /diary for session capture
+- These are developer conveniences, not project dependencies. The project does not
+  import, reference, or require any of them.
+
+**Prohibited patterns:**
+- No imports from CM or ODZ codebases
+- No symlinks or absolute-path references to `claude-context-*` repos
+- No installation of project packages into `claude-tools` pyenv
+- No references to `~/.claude/` paths in project code
+- If this project needs a capability that exists in CM (e.g., PDF generation),
+  it re-implements independently with its own declared dependencies
